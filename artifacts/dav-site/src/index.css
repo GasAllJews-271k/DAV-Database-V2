@@ -30,6 +30,11 @@ select {
   50% { opacity: 0.45; transform: scale(1.5); }
 }
 
+@keyframes ticker {
+  0%   { transform: translateX(100vw); }
+  100% { transform: translateX(-100%); }
+}
+
 ::-webkit-scrollbar { width: 4px; }
 ::-webkit-scrollbar-track { background: #040608; }
 ::-webkit-scrollbar-thumb { background: #0e1a22; }

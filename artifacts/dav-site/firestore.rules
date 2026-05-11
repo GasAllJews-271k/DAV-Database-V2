@@ -1,0 +1,67 @@
+// ============================================================
+// D.A.V. CLASSIFIED DATABASE — FIRESTORE SECURITY RULES
+// Apply these in the Firebase Console:
+//   Firestore Database → Rules → Edit and publish
+// ============================================================
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper: is the caller a signed-in user with a valid record?
+    function isAuth() {
+      return request.auth != null;
+    }
+
+    // Helper: what is the caller's current clearance level?
+    function callerLevel() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.level;
+    }
+
+    // Helper: CL-5+ can manage
+    function isAdmin() {
+      return isAuth() && callerLevel() >= 5;
+    }
+
+    // ── users collection ──────────────────────────────────────
+    match /users/{uid} {
+      // Any authenticated user may read the full roster
+      allow read: if isAuth();
+
+      // Only admins may create new user records
+      allow create: if isAdmin();
+
+      // Admins may update any field EXCEPT they cannot escalate
+      // another account beyond their own level.
+      // Users CANNOT write their own record at all.
+      allow update: if isAdmin()
+        && request.resource.data.level <= callerLevel();
+
+      // Only admins may delete (revoke) a user record
+      allow delete: if isAdmin();
+    }
+
+    // ── events collection ─────────────────────────────────────
+    match /events/{eventId} {
+      // Any authenticated user may read published events
+      allow read: if isAuth();
+
+      // CL-5+ may create/update/delete events
+      allow write: if isAdmin();
+    }
+
+    // ── announcements collection ──────────────────────────────
+    match /announcements/{annId} {
+      // Any authenticated user may read published announcements
+      allow read: if isAuth();
+
+      // CL-5+ may create/update/delete announcements
+      allow write: if isAdmin();
+    }
+
+    // Deny everything else by default
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

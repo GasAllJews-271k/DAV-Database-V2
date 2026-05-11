@@ -20,7 +20,7 @@ const blankForm: UserForm = {
   discordUsername: "",
 };
 
-type DiscordStatus = "idle" | "checking" | "verified" | "not_found" | "error" | "unconfigured";
+type DiscordStatus = "idle" | "checking" | "verified" | "not_found" | "error" | "unconfigured" | "already_linked";
 
 export default function UserManager() {
   const [users, setUsers] = useState<UserProfile[]>([]);
@@ -47,12 +47,24 @@ export default function UserManager() {
       const data = await res.json() as { found: boolean; displayName?: string; error?: string };
       if (data.error === "DISCORD_NOT_CONFIGURED") {
         setDiscordStatus("unconfigured");
-      } else if (data.found) {
-        setDiscordStatus("verified");
-        setDiscordDisplay(data.displayName || form.discordUsername);
-      } else {
-        setDiscordStatus("not_found");
+        return;
       }
+      if (!data.found) {
+        setDiscordStatus("not_found");
+        return;
+      }
+      const query = form.discordUsername.trim().toLowerCase();
+      const alreadyLinked = users.find(u => {
+        const ud = u as UserProfile & { discordUsername?: string };
+        return (ud.discordUsername || "").toLowerCase() === query;
+      });
+      if (alreadyLinked) {
+        setDiscordStatus("already_linked");
+        setDiscordDisplay(alreadyLinked.username || alreadyLinked.email);
+        return;
+      }
+      setDiscordStatus("verified");
+      setDiscordDisplay(data.displayName || form.discordUsername);
     } catch {
       setDiscordStatus("error");
     }
@@ -121,6 +133,7 @@ export default function UserManager() {
     checking: "#c47a1e",
     verified: "#00ff88",
     not_found: "#8b1a1a",
+    already_linked: "#8b1a1a",
     error: "#8b1a1a",
     unconfigured: "#c47a1e",
   };
@@ -130,6 +143,7 @@ export default function UserManager() {
     checking: "SCANNING SERVER...",
     verified: "MEMBER VERIFIED — " + discordDisplay,
     not_found: "NOT IN SERVER — ACCESS DENIED",
+    already_linked: "ACCOUNT ALREADY EXISTS FOR THIS DISCORD USER — REVOKE FIRST",
     error: "CHECK FAILED — RETRY",
     unconfigured: "BOT NOT CONFIGURED — SKIPPING",
   };

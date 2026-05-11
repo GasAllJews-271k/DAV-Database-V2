@@ -4,10 +4,38 @@ import { db } from "@/lib/firebase";
 import { type UserProfile, RANK_META } from "@/types";
 import { PageWrap, SecHeader, CARD, ClearancePill, Dot, Divider } from "@/components/Primitives";
 
+function msFromLastSeen(ls: UserProfile["lastSeen"]): number {
+  if (!ls) return 0;
+  if (typeof ls.toMillis === "function") return ls.toMillis();
+  if (ls.seconds) return ls.seconds * 1000;
+  return 0;
+}
+
+function onlineStatus(ls: UserProfile["lastSeen"]): "online" | "recent" | "offline" {
+  const ms = msFromLastSeen(ls);
+  if (!ms) return "offline";
+  const ago = Date.now() - ms;
+  if (ago < 5 * 60_000) return "online";
+  if (ago < 30 * 60_000) return "recent";
+  return "offline";
+}
+
+function lastSeenLabel(ls: UserProfile["lastSeen"]): string {
+  const ms = msFromLastSeen(ls);
+  if (!ms) return "";
+  const ago = Math.floor((Date.now() - ms) / 60_000);
+  if (ago < 1) return "just now";
+  if (ago < 60) return `${ago}m ago`;
+  const hrs = Math.floor(ago / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  return `${Math.floor(hrs / 24)}d ago`;
+}
+
 export default function RosterPage() {
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<number | null>(null);
+  const [, setTick] = useState(0);
 
   useEffect(() => {
     const q = query(collection(db, "users"), orderBy("level", "desc"));
@@ -17,7 +45,13 @@ export default function RosterPage() {
     });
   }, []);
 
+  useEffect(() => {
+    const id = setInterval(() => setTick(t => t + 1), 30_000);
+    return () => clearInterval(id);
+  }, []);
+
   const displayed = filter !== null ? users.filter(u => u.level === filter) : users;
+  const onlineCount = users.filter(u => onlineStatus(u.lastSeen) === "online").length;
 
   const counts = ([6, 5, 4, 3, 2, 1] as const).map(l => ({
     level: l,
@@ -28,6 +62,12 @@ export default function RosterPage() {
   return (
     <PageWrap>
       <SecHeader tag="Personnel — Roster" title="PERSONNEL ROSTER" sub="// Active division members — classified — authenticated access only" />
+
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16, fontFamily: "'Courier New',monospace", fontSize: 9 }}>
+        <Dot color="#00ff88" size={6} />
+        <span style={{ color: "#2a6b3c" }}>{onlineCount} OPERATIVE{onlineCount !== 1 ? "S" : ""} ONLINE</span>
+        <span style={{ color: "#1a3a4a", marginLeft: 8 }}>// ACTIVE IN LAST 5 MIN</span>
+      </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(110px,1fr))", gap: 8, marginBottom: 20 }}>
         {counts.map(({ level, count, meta }) => (
@@ -66,23 +106,35 @@ export default function RosterPage() {
       <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
         {displayed.map((u, i) => {
           const m = RANK_META[u.level] || RANK_META[1];
+          const status = onlineStatus(u.lastSeen);
+          const statusColor = status === "online" ? "#00ff88" : status === "recent" ? "#c47a1e" : "#1a3a4a";
+          const label = lastSeenLabel(u.lastSeen);
           return (
             <div key={u.id}>
-              {i > 0 && displayed[i - 1].level !== u.level && (
-                <Divider my={10} />
-              )}
+              {i > 0 && displayed[i - 1].level !== u.level && <Divider my={10} />}
               <div style={{ ...CARD, display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10, padding: "14px 18px" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                  <div style={{ width: 32, height: 32, border: "1px solid " + m.color + "44", background: m.color + "08", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                  <div style={{ width: 32, height: 32, border: "1px solid " + m.color + "44", background: m.color + "08", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, position: "relative" }}>
                     <Dot color={m.color} size={7} />
+                    {status === "online" && (
+                      <div style={{ position: "absolute", top: -3, right: -3, width: 8, height: 8, background: "#00ff88", borderRadius: "50%", border: "1px solid #040608" }} />
+                    )}
                   </div>
                   <div>
-                    <div style={{ color: "#c8d6e5", fontFamily: "'Courier New',monospace", fontSize: 12, fontWeight: 700, letterSpacing: 1 }}>
+                    <div style={{ color: "#c8d6e5", fontFamily: "'Courier New',monospace", fontSize: 12, fontWeight: 700, letterSpacing: 1, display: "flex", alignItems: "center", gap: 8 }}>
                       {u.username || u.email}
+                      {status === "online" && (
+                        <span style={{ color: "#00ff88", fontSize: 7, letterSpacing: 2, border: "1px solid #00ff8833", padding: "1px 5px" }}>ONLINE</span>
+                      )}
                     </div>
                     {u.username && (
                       <div style={{ color: "#1a3a4a", fontFamily: "'Courier New',monospace", fontSize: 9, marginTop: 2 }}>
                         {u.email}
+                      </div>
+                    )}
+                    {label && (
+                      <div style={{ color: statusColor, fontFamily: "'Courier New',monospace", fontSize: 8, marginTop: 2, letterSpacing: 1 }}>
+                        {status === "online" ? "● ACTIVE" : `● LAST SEEN ${label.toUpperCase()}`}
                       </div>
                     )}
                   </div>

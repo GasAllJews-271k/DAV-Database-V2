@@ -1,9 +1,16 @@
 import { useState, useEffect } from "react";
 import { collection, query, orderBy, onSnapshot } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { type Session, type Announcement, type GameEvent, RANK_META, canManage, canLog } from "@/types";
+import { type Session, type Announcement, type GameEvent, type UserProfile, RANK_META, canManage, canLog } from "@/types";
 import { prioColor, evTypeColor } from "@/lib/helpers";
 import { Badge, ClearancePill, CARD, btn, PageWrap, Divider, Dot } from "@/components/Primitives";
+
+function msFromLastSeen(ls: UserProfile["lastSeen"]): number {
+  if (!ls) return 0;
+  if (typeof ls.toMillis === "function") return ls.toMillis();
+  if (ls.seconds) return ls.seconds * 1000;
+  return 0;
+}
 
 interface FeedEntry {
   text: string;
@@ -102,6 +109,20 @@ export default function PersonnelPortal({ session, setPage, events, announcement
   const upcoming = events.filter(e => e.published && (e.status === "Upcoming" || e.status === "Ongoing"));
   const accessTier = session.level >= 5 ? "FULL ADMINISTRATION" : session.level >= 3 ? "FIELD OPERATIONS" : "READ-ONLY ACCESS";
 
+  const [onlineCount, setOnlineCount] = useState(0);
+
+  useEffect(() => {
+    const q = query(collection(db, "users"), orderBy("level", "desc"));
+    return onSnapshot(q, snap => {
+      const count = snap.docs.filter(d => {
+        const ls = d.data().lastSeen as UserProfile["lastSeen"];
+        const ms = msFromLastSeen(ls);
+        return ms && Date.now() - ms < 5 * 60_000;
+      }).length;
+      setOnlineCount(count);
+    });
+  }, []);
+
   return (
     <PageWrap>
       <div style={{ ...CARD, marginBottom: 20, border: "1px solid " + m.color + "33" }}>
@@ -118,16 +139,20 @@ export default function PersonnelPortal({ session, setPage, events, announcement
         </div>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(130px,1fr))", gap: 10, marginBottom: 20 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(120px,1fr))", gap: 10, marginBottom: 20 }}>
         {[
           ["CLEARANCE", "CL-" + session.level, m.color],
           ["RANK", m.label.toUpperCase(), m.color],
           ["ACTIVE OPS", String(upcoming.length), "#00ff88"],
           ["BROADCASTS", String(pubAnns.length), "#c47a1e"],
+          ["ONLINE NOW", String(onlineCount), "#00ff88"],
         ].map(([l, v, c]) => (
           <div key={l} style={{ ...CARD, textAlign: "center" }}>
             <div style={{ color: "#1a3a4a", fontFamily: "'Courier New',monospace", fontSize: 8, letterSpacing: 2, marginBottom: 6 }}>{l}</div>
-            <div style={{ color: c, fontFamily: "'Courier New',monospace", fontSize: 14, fontWeight: 900 }}>{v}</div>
+            <div style={{ color: c, fontFamily: "'Courier New',monospace", fontSize: 14, fontWeight: 900, display: "flex", alignItems: "center", justifyContent: "center", gap: 5 }}>
+              {l === "ONLINE NOW" && <Dot color="#00ff88" size={5} />}
+              {v}
+            </div>
           </div>
         ))}
       </div>

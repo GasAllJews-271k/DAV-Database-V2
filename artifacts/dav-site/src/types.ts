@@ -36,6 +36,8 @@ export interface UserProfile {
   username?: string;
   level: number;
   rank?: string;
+  discordUsername?: string;
+  lastSeen?: { toMillis?: () => number; seconds?: number } | null;
   createdAt?: unknown;
 }
 

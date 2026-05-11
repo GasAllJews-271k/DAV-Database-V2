@@ -10,11 +10,47 @@ interface HomePageProps {
   session: Session | null;
 }
 
+interface RobloxStats {
+  playing: number;
+  visits: number;
+  name: string;
+}
+
+function useRobloxStats() {
+  const [stats, setStats] = useState<RobloxStats | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    const fetch_ = async () => {
+      try {
+        const res = await fetch("/api/roblox/stats");
+        if (!res.ok) return;
+        const data = await res.json() as RobloxStats;
+        if (alive) setStats(data);
+      } catch {
+        // silently fail — Roblox API is optional
+      }
+    };
+    fetch_();
+    const id = setInterval(fetch_, 90_000);
+    return () => { alive = false; clearInterval(id); };
+  }, []);
+
+  return stats;
+}
+
+function fmtVisits(n: number): string {
+  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + "M";
+  if (n >= 1_000) return (n / 1_000).toFixed(1) + "K";
+  return String(n);
+}
+
 export default function HomePage({ setPage, session }: HomePageProps) {
   const [phase, setPhase] = useState(0);
   const [done, setDone] = useState(false);
   const [anns, setAnns] = useState<Announcement[]>([]);
   const [evs, setEvs] = useState<GameEvent[]>([]);
+  const roblox = useRobloxStats();
 
   useEffect(() => {
     const uq = query(collection(db, "announcements"), orderBy("createdAt", "desc"));
@@ -38,6 +74,17 @@ export default function HomePage({ setPage, session }: HomePageProps) {
     }
     return undefined;
   }, [phase, done]);
+
+  const statsRow: Array<[string, string, string]> = [
+    ["ACTIVE OPS", String(evs.length), "#00ff88"],
+    ["BROADCASTS", String(anns.length), "#c47a1e"],
+    ...(roblox
+      ? ([
+          ["IN-GAME NOW", String(roblox.playing), "#00ff88"],
+          ["TOTAL VISITS", fmtVisits(roblox.visits), "#8aaabb"],
+        ] as Array<[string, string, string]>)
+      : ([["CLEARANCE TIERS", "6", "#8aaabb"]] as Array<[string, string, string]>)),
+  ];
 
   return (
     <div>
@@ -78,19 +125,26 @@ export default function HomePage({ setPage, session }: HomePageProps) {
             )}
           </div>
         </div>
+
         {/* Stats row */}
         {done && (
-          <div style={{ width: "100%", maxWidth: 640, marginTop: 16, display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 10 }}>
-            {[
-              ["ACTIVE OPS", String(evs.length), "#00ff88"],
-              ["BROADCASTS", String(anns.length), "#c47a1e"],
-              ["CLEARANCE TIERS", "6", "#8aaabb"],
-            ].map(([l, v, c]) => (
+          <div style={{ width: "100%", maxWidth: 640, marginTop: 16, display: "grid", gridTemplateColumns: `repeat(${statsRow.length},1fr)`, gap: 10 }}>
+            {statsRow.map(([l, v, c]) => (
               <div key={l} style={{ ...CARD, textAlign: "center", padding: "14px 10px" }}>
                 <div style={{ color: "#1a3a4a", fontFamily: "'Courier New',monospace", fontSize: 8, letterSpacing: 2, marginBottom: 4 }}>{l}</div>
-                <div style={{ color: c, fontFamily: "'Courier New',monospace", fontSize: 18, fontWeight: 900 }}>{v}</div>
+                <div style={{ color: c, fontFamily: "'Courier New',monospace", fontSize: 18, fontWeight: 900, display: "flex", alignItems: "center", justifyContent: "center", gap: 5 }}>
+                  {l === "IN-GAME NOW" && <Dot color="#00ff88" size={5} />}
+                  {v}
+                </div>
               </div>
             ))}
+          </div>
+        )}
+
+        {/* Roblox attribution */}
+        {done && roblox && (
+          <div style={{ marginTop: 8, fontFamily: "'Courier New',monospace", fontSize: 8, color: "#1a3a2a", letterSpacing: 2 }}>
+            LIVE ROBLOX DATA — UPDATES EVERY 90S
           </div>
         )}
       </div>

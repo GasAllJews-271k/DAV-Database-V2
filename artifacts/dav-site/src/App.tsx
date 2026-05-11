@@ -1,13 +1,14 @@
 import { useState, useEffect } from "react";
 import { onAuthStateChanged, signOut } from "firebase/auth";
-import { doc, getDoc } from "firebase/firestore";
-import { collection, query, orderBy, onSnapshot } from "firebase/firestore";
+import { doc, getDoc, updateDoc } from "firebase/firestore";
+import { collection, query, orderBy, onSnapshot, serverTimestamp } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 import { type Session, type Announcement, type GameEvent, canManage, canLog } from "@/types";
 
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import AnnouncementBanner from "@/components/AnnouncementBanner";
+import Terminal from "@/components/Terminal";
 import { Scanlines } from "@/components/Primitives";
 
 import HomePage from "@/pages/HomePage";
@@ -44,6 +45,7 @@ export default function App() {
   const [authLoading, setAuthLoading] = useState(true);
   const [anns, setAnns] = useState<Announcement[]>([]);
   const [events, setEvents] = useState<GameEvent[]>([]);
+  const [termOpen, setTermOpen] = useState(false);
 
   useEffect(() => {
     return onAuthStateChanged(auth, async (user) => {
@@ -60,6 +62,23 @@ export default function App() {
       }
       setAuthLoading(false);
     });
+  }, []);
+
+  useEffect(() => {
+    if (!session) return;
+    const ref = doc(db, "users", session.uid);
+    const update = () => updateDoc(ref, { lastSeen: serverTimestamp() }).catch(() => {});
+    update();
+    const id = setInterval(update, 60_000);
+    return () => clearInterval(id);
+  }, [session?.uid]);
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "`") { e.preventDefault(); setTermOpen((o) => !o); }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
   }, []);
 
   useEffect(() => {
@@ -116,6 +135,22 @@ export default function App() {
         {active === "Roster" && session && <RosterPage />}
       </div>
       {active !== "Home" && <Footer setPage={setPage} />}
+
+      {termOpen && (
+        <Terminal session={session} setPage={setPage} onClose={() => setTermOpen(false)} />
+      )}
+
+      {!termOpen && (
+        <div
+          onClick={() => setTermOpen(true)}
+          title="Open Terminal [ ` ]"
+          style={{ position: "fixed", bottom: 20, right: 20, zIndex: 999, background: "#040608", border: "1px solid #00ff8833", color: "#00ff88", fontFamily: "'Courier New',monospace", fontSize: 9, letterSpacing: 2, padding: "6px 12px", cursor: "pointer", userSelect: "none", opacity: 0.7 }}
+          onMouseEnter={e => (e.currentTarget.style.opacity = "1")}
+          onMouseLeave={e => (e.currentTarget.style.opacity = "0.7")}
+        >
+          &gt;_ TERMINAL [`]
+        </div>
+      )}
     </div>
   );
 }

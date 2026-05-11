@@ -4,6 +4,30 @@ import { db } from "@/lib/firebase";
 import { type GameEvent } from "@/types";
 import { evStatColor, evTypeColor, fmtDate } from "@/lib/helpers";
 import { Badge, CARD, btn, PageWrap, SecHeader } from "@/components/Primitives";
+import { useCountdown } from "@/hooks/useCountdown";
+
+function CountdownBadge({ date, time }: { date: string; time?: string }) {
+  const display = useCountdown(date, time);
+  if (!display) return null;
+  const isDone = display === "COMMENCING NOW";
+  return (
+    <div style={{
+      fontFamily: "'Courier New',monospace",
+      fontSize: 11,
+      color: isDone ? "#00ff88" : "#c47a1e",
+      border: "1px solid " + (isDone ? "#00ff8844" : "#c47a1e44"),
+      padding: "4px 10px",
+      letterSpacing: 2,
+      display: "inline-flex",
+      alignItems: "center",
+      gap: 6,
+      marginTop: 6,
+    }}>
+      <span style={{ fontSize: 8, opacity: 0.7 }}>T-MINUS</span>
+      {display}
+    </div>
+  );
+}
 
 export default function EventsPage() {
   const [events, setEvents] = useState<GameEvent[]>([]);
@@ -37,8 +61,9 @@ export default function EventsPage() {
               <div>
                 <div style={{ color: "#1a3a4a", fontSize: 8, letterSpacing: 3, fontFamily: "'Courier New',monospace", marginBottom: 4 }}>{fmtDate(ev.date)} — {ev.time} UTC</div>
                 <div style={{ color: "#b0c4d4", fontWeight: 700, fontSize: 13, letterSpacing: 2, textTransform: "uppercase", fontFamily: "'Courier New',monospace" }}>{ev.title}</div>
+                {ev.status === "Upcoming" && <CountdownBadge date={ev.date} time={ev.time} />}
               </div>
-              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "flex-start" }}>
                 <Badge label={ev.type || ""} color={evTypeColor(ev.type)} />
                 <Badge label={ev.status || ""} color={evStatColor(ev.status)} />
               </div>
